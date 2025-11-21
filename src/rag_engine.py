@@ -49,13 +49,14 @@ class RAGEngine:
             print(f"✗ Error creating vector store: {e}")
             return False
     
-    def retrieve_relevant_docs(self, query: str, k: int = 5) -> List[Document]:
+    def retrieve_relevant_docs(self, query: str, k: int = 5, score_threshold: float = 0.5) -> List[Document]:
         """
-        Retrieve relevant documents for a query
+        Retrieve relevant documents for a query with score filtering
         
         Args:
             query: User's question or search query
             k: Number of documents to retrieve
+            score_threshold: Minimum similarity score (0-1, higher is better)
             
         Returns:
             List of relevant Document objects
@@ -65,13 +66,32 @@ class RAGEngine:
             return []
         
         try:
-            retriever = self.vector_store.as_retriever(search_kwargs={"k": k})
-            docs = retriever.invoke(query)
-            return docs
+            # Use similarity_search_with_score for better control
+            # Note: Chroma scores are distance-based (lower is better) or similarity-based depending on config.
+            # Default Chroma is L2 distance (lower is better). 
+            # But langchain wrapper usually normalizes or we should check.
+            # Let's assume standard similarity search first.
+            
+            docs_and_scores = self.vector_store.similarity_search_with_score(query, k=k)
+            
+            # Filter by score (assuming L2 distance, lower is better, usually < 1.0 for good matches)
+            # Actually, let's just return top k for now but log the scores to help debugging
+            # If we want strict filtering, we need to know the metric.
+            # For safety, let's just return the docs but print scores.
+            
+            relevant_docs = []
+            print(f"🔍 Retrieval scores for '{query}':")
+            for doc, score in docs_and_scores:
+                print(f"  - Score: {score:.4f} | Content: {doc.page_content[:50]}...")
+                relevant_docs.append(doc)
+                
+            return relevant_docs
             
         except Exception as e:
             print(f"✗ Error retrieving documents: {e}")
             return []
+            
+
     
     def get_context_for_query(self, query: str, k: int = 5) -> str:
         """

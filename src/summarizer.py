@@ -18,7 +18,7 @@ class CourseSummarizer:
             model=model,
             openai_api_key=api_key,
             openai_api_base="https://openrouter.ai/api/v1",
-            temperature=0.2,
+            temperature=0.1,  # Very low temperature to prevent hallucination
             max_tokens=8000
         )
     
@@ -66,33 +66,40 @@ class CourseSummarizer:
         
         # MAP PHASE: Extract information from each batch
         map_prompt = ChatPromptTemplate.from_template(
-            f"""You are analyzing course material chunks. Extract ALL study-relevant information ONLY from the provided text below.
+            f"""You are analyzing course material chunks. Extract ALL study-relevant information STRICTLY from the provided text below.
 
-**CRITICAL: Only extract information that is EXPLICITLY present in the text. DO NOT add external knowledge or examples.**
+**⛔ ABSOLUTE RULES - VIOLATION WILL INVALIDATE YOUR RESPONSE:**
+1. ONLY extract information EXPLICITLY written in the text below
+2. DO NOT use any external knowledge, memory, or previous training
+3. DO NOT invent examples, formulas, or concepts not in this text
+4. DO NOT mention topics that don't appear in this specific text
+5. If something is not in the text, DO NOT include it
+6. Quote the actual subject/topic names from the text (e.g., if text is about "Security", don't mention "Algebra")
 
-**IMPORTANT: Respond in the SAME LANGUAGE as the course content (French → French, English → English)**
+**IMPORTANT: Detect the language of the text and respond in the EXACT SAME LANGUAGE (French → French, English → English)**
 
-Extract and list in detail:
+**FIRST: Identify the main topic/subject from the text (e.g., "Security", "Algebra", "Biology", etc.)**
+**Main Topic of this text:** [Write the topic you see in the text]
 
-1. **DÉFINITIONS / DEFINITIONS**: Every technical term with complete definition (from the text)
-2. **FORMULES / FORMULAS**: ALL mathematical formulas, equations with:
-   - Complete notation (write the actual formula as shown)
-   - Variable explanations (if present in text)
-   - Numerical examples (only if provided in text)
-3. **MÉTHODES / METHODS**: Step-by-step procedures for each algorithm/method (as described in text)
-4. **CONCEPTS**: Key theories with explanations (from the text)
-5. **EXEMPLES / EXAMPLES**: Worked problems with solutions (only from text)
-6. **PROPRIÉTÉS / PROPERTIES**: Important characteristics and rules (from the text)
+Extract and list in detail (ONLY if present in text):
 
-**DO NOT**: Invent examples, add external knowledge, or discuss topics not in the provided text.
+1. **DÉFINITIONS / DEFINITIONS**: Technical terms with definitions (copy from text)
+2. **FORMULES / FORMULAS**: Mathematical formulas (copy exactly as shown)
+3. **MÉTHODES / METHODS**: Procedures/algorithms (copy steps from text)
+4. **CONCEPTS**: Theories with explanations (copy from text)
+5. **EXEMPLES / EXAMPLES**: Problems with solutions (copy from text)
+6. **PROPRIÉTÉS / PROPERTIES**: Characteristics and rules (copy from text)
 
-Target: ~{batch_words} words - BE VERY DETAILED about what IS in the text!
+**VALIDATION CHECK**: Re-read the text below and verify every sentence you write comes DIRECTLY from it.
 
-COURSE MATERIAL:
-{{{{context}}}}
+Target: ~{batch_words} words
 
-Detailed extraction (only from above text):""")
+COURSE MATERIAL TO ANALYZE:
+{{context}}
+
+My extraction (strictly from above text only):""")
         
+        # MAP PHASE: Extract information from each batch
         batch_summaries = []
         total_batches = (len(documents) + batch_size - 1) // batch_size
         
@@ -123,15 +130,19 @@ Detailed extraction (only from above text):""")
         
         # REDUCE PHASE: Combine into final study guide
         reduce_prompt = ChatPromptTemplate.from_template(
-            f"""Create a COMPREHENSIVE EXAM CHEAT SHEET from these batch extractions.
+            f"""Create a COMPREHENSIVE EXAM CHEAT SHEET by combining the batch extractions below.
 
-**CRITICAL: Write EVERYTHING in the SAME LANGUAGE as the batch extractions below.**
+**⛔ CRITICAL ANTI-HALLUCINATION RULES:**
+1. ONLY use information from the batch extractions below
+2. DO NOT add external knowledge or topics not in the extractions
+3. Combine ALL topics found in the extractions (e.g., if batches cover "Algebra" AND "Security", include BOTH)
+4. Write EVERYTHING in the SAME LANGUAGE as the batch extractions (if mixed, use the dominant language or separate sections)
 
 Target: ~{final_words} words (very detailed exam reference)
 
 **STRUCTURE YOUR CHEAT SHEET EXACTLY LIKE THIS:**
 
-# � TITRE DU COURS / COURSE TITLE
+#  TITRE DU COURS / COURSE TITLE
 [One clear title line]
 
 ---
@@ -230,7 +241,7 @@ For each method:
 - DO NOT summarize or compress - students need ALL details for exam
 - Use bullet points, numbered lists, and tables for easy reference
 
-{{{{summaries}}}}
+{{summaries}}
 
 Complete Exam Cheat Sheet:""")
         

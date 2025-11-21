@@ -1,7 +1,3 @@
-"""
-Document Processing Utilities
-Text chunking and document preparation
-"""
 
 from typing import List
 from langchain_text_splitters import RecursiveCharacterTextSplitter
@@ -11,7 +7,7 @@ from langchain_core.documents import Document
 class DocumentProcessor:
     """Process and chunk documents for RAG pipeline"""
     
-    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 300):
+    def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 500):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         

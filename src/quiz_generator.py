@@ -41,6 +41,7 @@ Course Material:
 {context}
 
 Requirements:
+- Generate questions in the SAME LANGUAGE as the course material (if the material is in French, generate questions in French; if English, use English)
 - Each question should test understanding of key concepts
 - Provide 4 options (A, B, C, D) for each question
 - Only ONE option should be correct

@@ -1,7 +1,3 @@
-"""
-PDF and PowerPoint Processor Module
-Handles document loading, text extraction, and image analysis with vision model
-"""
 
 from pathlib import Path
 from typing import List

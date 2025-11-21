@@ -7,6 +7,8 @@ import streamlit as st
 from pathlib import Path
 import tempfile
 import shutil
+import os
+from dotenv import load_dotenv
 
 from src.document_loader import DocumentLoader
 from src.document_processor import DocumentProcessor
@@ -15,11 +17,18 @@ from src.quiz_generator import QuizGenerator
 from src.summarizer import CourseSummarizer
 from src.chatbot import CourseChatbot
 
+# Load environment variables
+load_dotenv()
+
 # Configuration
-API_KEY = "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"
+API_KEY = os.getenv("OPENROUTER_API_KEY") or os.getenv("OPENAI_API_KEY")
 MODEL = "x-ai/grok-4.1-fast"
 VISION_MODEL = "x-ai/grok-4.1-fast"
 TEMP_DIR = "./temp_images"
+
+if not API_KEY:
+    st.error("⚠️ API Key not found! Please set OPENROUTER_API_KEY in .env file")
+    st.stop()
 
 # Page config
 st.set_page_config(

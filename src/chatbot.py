@@ -49,6 +49,7 @@ Course Material:
 Student's Question: {question}
 
 Instructions:
+- Answer in the SAME LANGUAGE as the student's question (if they ask in French, respond in French; if English, respond in English)
 - Answer clearly and concisely
 - Use information from the course material
 - If the answer isn't in the material, say so politely
