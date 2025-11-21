@@ -1,0 +1,3 @@
+"""
+Study Assistant Application Package
+"""

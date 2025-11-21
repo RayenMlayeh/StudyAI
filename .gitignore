@@ -7,4 +7,36 @@ wheels/
 *.egg-info
 
 # Virtual environments
-.venv
+.venv/
+venv/
+env/
+
+# Environment variables
+.env
+.env.local
+
+# ChromaDB vector store
+chroma_db/
+
+# Extracted images and temporary files
+temp_images/
+extracted_images/
+
+# Jupyter Notebook checkpoints
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# UV lock file (optional - include if you want reproducible builds)
+uv.lock
+
+# Python version file (optional)
+# .python-version
