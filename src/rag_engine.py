@@ -1,8 +1,3 @@
-"""
-RAG Engine Module
-Handles vector store creation and document retrieval
-"""
-
 from typing import List
 from langchain_core.documents import Document
 from langchain_openai import OpenAIEmbeddings

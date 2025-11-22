@@ -117,7 +117,6 @@ My extraction (strictly from above text only):""")
                 page = doc.metadata.get('page', '?')
                 # Don't truncate - chunks are already sized appropriately
                 context_parts.append(f"[Source: {source}, Page: {page}]\n{doc.page_content}")
-            
             context = "\n\n---\n\n".join(context_parts)
             
             # Extract information from batch
