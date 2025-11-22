@@ -52,21 +52,21 @@ class CourseSummarizer:
         # Calculate target word counts based on document volume
         num_docs = len(documents)
         if num_docs <= 10:
+            batch_words = 200
+            final_words = 500
+        elif num_docs <= 30:
+            batch_words = 300
+            final_words = 1000
+        elif num_docs <= 50:
+            batch_words = 400
+            final_words = 1500
+        else:
             batch_words = 500
             final_words = 2000
-        elif num_docs <= 30:
-            batch_words = 700
-            final_words = 4000
-        elif num_docs <= 50:
-            batch_words = 900
-            final_words = 6000
-        else:
-            batch_words = 1200
-            final_words = 8000
         
         # MAP PHASE: Extract information from each batch
         map_prompt = ChatPromptTemplate.from_template(
-            f"""You are analyzing course material chunks. Extract ALL study-relevant information STRICTLY from the provided text below.
+            f"""You are analyzing course material chunks. Extract ONLY the MOST CRITICAL study information from the provided text below.
 
 **⛔ ABSOLUTE RULES - VIOLATION WILL INVALIDATE YOUR RESPONSE:**
 1. ONLY extract information EXPLICITLY written in the text below
@@ -83,16 +83,15 @@ class CourseSummarizer:
 
 Extract and list in detail (ONLY if present in text):
 
-1. **DÉFINITIONS / DEFINITIONS**: Technical terms with definitions (copy from text)
-2. **FORMULES / FORMULAS**: Mathematical formulas (copy exactly as shown)
-3. **MÉTHODES / METHODS**: Procedures/algorithms (copy steps from text)
-4. **CONCEPTS**: Theories with explanations (copy from text)
-5. **EXEMPLES / EXAMPLES**: Problems with solutions (copy from text)
-6. **PROPRIÉTÉS / PROPERTIES**: Characteristics and rules (copy from text)
+1. **DÉFINITIONS CLÉS / KEY DEFINITIONS**: Only the most important technical terms (copy from text)
+2. **FORMULES ESSENTIELLES / ESSENTIAL FORMULAS**: Critical mathematical formulas only (copy exactly as shown)
+3. **MÉTHODES PRINCIPALES / MAIN METHODS**: Key procedures/algorithms (copy steps from text)
+4. **CONCEPTS MAJEURS / MAJOR CONCEPTS**: Core theories with brief explanations (copy from text)
+5. **EXEMPLE CLÉ / KEY EXAMPLE**: One best example if available (copy from text)
 
 **VALIDATION CHECK**: Re-read the text below and verify every sentence you write comes DIRECTLY from it.
 
-Target: ~{batch_words} words
+Target: ~{batch_words} words (concise extraction)
 
 COURSE MATERIAL TO ANALYZE:
 {{context}}
@@ -130,7 +129,7 @@ My extraction (strictly from above text only):""")
         
         # REDUCE PHASE: Combine into final study guide
         reduce_prompt = ChatPromptTemplate.from_template(
-            f"""Create a COMPREHENSIVE EXAM CHEAT SHEET by combining the batch extractions below.
+            f"""Create a CONCISE EXECUTIVE SUMMARY / CHEAT SHEET by synthesizing the batch extractions below.
 
 **⛔ CRITICAL ANTI-HALLUCINATION RULES:**
 1. ONLY use information from the batch extractions below
@@ -138,7 +137,7 @@ My extraction (strictly from above text only):""")
 3. Combine ALL topics found in the extractions (e.g., if batches cover "Algebra" AND "Security", include BOTH)
 4. Write EVERYTHING in the SAME LANGUAGE as the batch extractions (if mixed, use the dominant language or separate sections)
 
-Target: ~{final_words} words (very detailed exam reference)
+Target: ~{final_words} words (concise, high-impact cheat sheet)
 
 **STRUCTURE YOUR CHEAT SHEET EXACTLY LIKE THIS:**
 
@@ -149,101 +148,69 @@ Target: ~{final_words} words (very detailed exam reference)
 
 # 📖 DÉFINITIONS CLÉS / KEY DEFINITIONS
 
-List EVERY term as:
-- **Terme/Term**: Définition complète / Complete definition
-- **Terme/Term**: Définition complète / Complete definition
-[Include ALL technical vocabulary]
+List ONLY the most critical terms:
+- **Terme/Term**: Définition concise / Concise definition
+[Include only essential vocabulary]
 
 ---
 
-# 🔢 FORMULES MATHÉMATIQUES / MATHEMATICAL FORMULAS
+# 🔢 FORMULES ESSENTIELLES / ESSENTIAL FORMULAS
 
-For EACH formula:
+For EACH critical formula:
 **Nom de la formule / Formula name:**
 - Formule: [Write the actual mathematical expression]
-- Variables: [Explain each symbol]
-- Utilisation: [When/how to use]
-- Exemple: [Numerical example if available]
+- Variables: [Briefly explain symbols]
+- Utilisation: [When to use (1 line)]
 
-[List ALL formulas from the materials - do NOT skip any!]
+[List only the most important formulas]
 
 ---
 
-# 💡 CONCEPTS THÉORIQUES / THEORETICAL CONCEPTS
+# 💡 CONCEPTS MAJEURS / MAJOR CONCEPTS
 
-For each concept:
+For each core concept:
 **Nom du concept / Concept name:**
-- Explication détaillée / Detailed explanation
-- Propriétés clés / Key properties
-- Relations avec autres concepts / Relations to other concepts
-- Applications / Applications
+- Explication concise / Concise explanation
+- Points clés / Key points
 
 ---
 
-# ⚙️ MÉTHODES ET ALGORITHMES / METHODS & ALGORITHMS
+# ⚙️ MÉTHODES PRINCIPALES / MAIN METHODS
 
-For each method:
+For each key method:
 **Nom de la méthode / Method name:**
 1. Étape 1 / Step 1
 2. Étape 2 / Step 2
-[Complete step-by-step procedure]
-- Entrée/Input: [What goes in]
-- Sortie/Output: [What comes out]
-- Exemple: [Concrete example]
+[Brief step-by-step]
 
 ---
 
-# 📝 EXEMPLES RÉSOLUS / WORKED EXAMPLES
+# 📝 EXEMPLE TYPE / TYPICAL EXAMPLE
 
-**Exemple 1 / Example 1:**
-- Énoncé / Problem: [Full problem statement]
-- Solution: [Complete step-by-step solution]
-- Réponse finale / Final answer: [Result]
+**Exemple / Example:**
+- Énoncé / Problem: [Problem statement]
+- Solution: [Solution steps]
+- Réponse / Answer: [Result]
 
-[Include multiple examples for complex topics]
-
----
-
-# ⚖️ COMPARAISONS / COMPARISONS
-
-| Concept A | vs | Concept B |
-|-----------|-----|-----------|
-| Différence 1 | | Différence 1 |
-| Avantages / Advantages | | Avantages / Advantages |
-| Quand utiliser / When to use | | Quand utiliser / When to use |
+[Include only 1-2 representative examples]
 
 ---
 
-# ⚠️ POINTS IMPORTANTS À RETENIR / KEY POINTS TO REMEMBER
+# ⚠️ À RETENIR / KEY TAKEAWAYS
 
-- ✓ Fait critique 1 / Critical fact 1
-- ✓ Fait critique 2 / Critical fact 2
-- ⚠️ Erreur courante à éviter / Common mistake to avoid
-- 💡 Astuce d'examen / Exam tip
-
----
-
-# 📋 QUESTIONS TYPES D'EXAMEN / TYPICAL EXAM QUESTIONS
-
-**Questions théoriques / Theoretical questions:**
-1. [Example question type]
-2. [Example question type]
-
-**Exercices de calcul / Calculation problems:**
-1. [Example problem type]
-2. [Example problem type]
+- ✓ Point clé 1 / Key point 1
+- ✓ Point clé 2 / Key point 2
+- ⚠️ Erreur à éviter / Mistake to avoid
 
 **CRITICAL INSTRUCTIONS:**
-- Extract EVERY SINGLE formula from batch summaries (write the actual mathematical expression)
-- Include EVERY definition mentioned
-- Provide COMPLETE step-by-step methods
-- Add worked examples with full solutions
-- DO NOT summarize or compress - students need ALL details for exam
-- Use bullet points, numbered lists, and tables for easy reference
+- Focus on QUALITY over QUANTITY.
+- Synthesize and condense information.
+- Do NOT list every single detail, only what is needed for an exam cheat sheet.
+- Keep descriptions brief and to the point.
 
 {{summaries}}
 
-Complete Exam Cheat Sheet:""")
+Concise Exam Cheat Sheet:""")
         
         combined_summaries = "\n\n=== BATCH EXTRACTION ===\n\n".join(batch_summaries)
         
