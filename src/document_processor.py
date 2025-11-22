@@ -4,9 +4,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_core.documents import Document
 
 
-class DocumentProcessor:
-    """Process and chunk documents for RAG pipeline"""
-    
+class DocumentProcessor:    
     def __init__(self, chunk_size: int = 1500, chunk_overlap: int = 500):
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
@@ -46,12 +44,12 @@ class DocumentProcessor:
             List of chunked Document objects
         """
         if not documents:
-            print("⚠️ No documents to split")
+            print("No documents to split")
             return []
         
         # Calculate total content size
         total_chars = sum(len(doc.page_content) for doc in documents)
-        print(f"\n📊 Document Statistics:")
+        print(f"\nDocument Statistics:")
         print(f"  Total documents: {len(documents)}")
         print(f"  Total characters: {total_chars:,}")
         print(f"  Average doc size: {total_chars // len(documents):,} chars")
@@ -70,7 +68,7 @@ class DocumentProcessor:
         chunks = text_splitter.split_documents(documents)
         
         # Detailed output
-        print(f"\n✓ Split {len(documents)} documents into {len(chunks)} chunks")
+        print(f"\nSplit {len(documents)} documents into {len(chunks)} chunks")
         print(f"  Splitting ratio: {len(chunks) / len(documents):.1f}x")
         
         if chunks:
@@ -79,7 +77,7 @@ class DocumentProcessor:
             print(f"  Min chunk size: {min(chunk_sizes):,} chars")
             print(f"  Max chunk size: {max(chunk_sizes):,} chars")
             
-            print(f"\n📝 Example chunk:")
+            print(f"\nExample chunk:")
             print(f"  Content: {chunks[0].page_content[:200]}...")
             print(f"  Length: {len(chunks[0].page_content)} chars")
             print(f"  Metadata: {chunks[0].metadata}")
@@ -98,5 +96,5 @@ class DocumentProcessor:
             Combined list of documents
         """
         all_docs = text_docs + image_docs
-        print(f"✓ Merged {len(text_docs)} text docs + {len(image_docs)} image docs = {len(all_docs)} total")
+        print(f"Merged {len(text_docs)} text docs + {len(image_docs)} image docs = {len(all_docs)} total")
         return all_docs

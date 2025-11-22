@@ -12,19 +12,22 @@ try:
     PYMUPDF_AVAILABLE = True
 except ImportError:
     PYMUPDF_AVAILABLE = False
-    print("⚠️ PyMuPDF not available. Image extraction from PDFs will be disabled.")
+    print("PyMuPDF not available. Image extraction from PDFs will be disabled.")
 
 try:
     from pptx import Presentation
     PPTX_AVAILABLE = True
 except ImportError:
     PPTX_AVAILABLE = False
-    print("⚠️ python-pptx not available. Image extraction from PowerPoint will be disabled.")
+    print("python-pptx not available. Image extraction from PowerPoint will be disabled.")
 
 
-class DocumentLoader:
-    """Load and process PDF and PowerPoint documents with vision analysis"""
-    
+import hashlib
+import concurrent.futures
+from PIL import Image
+import io
+
+class DocumentLoader:    
     def __init__(self, api_key: str, vision_model: str = "x-ai/grok-4.1-fast"):
         self.api_key = api_key
         self.vision_llm = ChatOpenAI(
@@ -53,11 +56,11 @@ class DocumentLoader:
                 doc.metadata['source_file'] = Path(pdf_path).name
                 doc.metadata['file_type'] = 'pdf'
             
-            print(f"✓ Loaded {len(documents)} pages from {Path(pdf_path).name}")
+            print(f"Loaded {len(documents)} pages from {Path(pdf_path).name}")
             return documents
             
         except Exception as e:
-            print(f"✗ Error loading PDF: {e}")
+            print(f"Error loading PDF: {e}")
             return []
     
     def load_powerpoint(self, pptx_path: str) -> List[Document]:
@@ -78,30 +81,24 @@ class DocumentLoader:
                 doc.metadata['source_file'] = Path(pptx_path).name
                 doc.metadata['file_type'] = 'pptx'
             
-            print(f"✓ Loaded PowerPoint: {Path(pptx_path).name}")
+            print(f"Loaded PowerPoint: {Path(pptx_path).name}")
             return documents
             
         except Exception as e:
-            print(f"✗ Error loading PowerPoint: {e}")
+            print(f"Error loading PowerPoint: {e}")
             return []
     
     def extract_images_from_pdf(self, pdf_path: str, output_dir: str = "./temp_images") -> List[str]:
         """
-        Extract images from PDF
-        
-        Args:
-            pdf_path: Path to PDF file
-            output_dir: Directory to save extracted images
-            
-        Returns:
-            List of image file paths
+        Extract images from PDF with filtering for small images and duplicates
         """
         if not PYMUPDF_AVAILABLE:
-            print("⚠️ PyMuPDF not installed. Cannot extract images.")
+            print("PyMuPDF not installed. Cannot extract images.")
             return []
         
         Path(output_dir).mkdir(exist_ok=True)
         image_paths = []
+        seen_hashes = set()
         
         try:
             pdf_document = fitz.open(pdf_path)
@@ -115,37 +112,49 @@ class DocumentLoader:
                     base_image = pdf_document.extract_image(xref)
                     image_bytes = base_image["image"]
                     
-                    image_path = Path(output_dir) / f"page{page_num + 1}_img{img_index + 1}.png"
-                    with open(image_path, "wb") as img_file:
-                        img_file.write(image_bytes)
-                    
-                    image_paths.append(str(image_path))
+                    # Filter small images and duplicates
+                    try:
+                        pil_img = Image.open(io.BytesIO(image_bytes))
+                        width, height = pil_img.size
+                        
+                        # Skip small images (icons, bullets, etc.)
+                        if width < 200 or height < 200:
+                            continue
+                            
+                        # Skip duplicates
+                        img_hash = hashlib.md5(image_bytes).hexdigest()
+                        if img_hash in seen_hashes:
+                            continue
+                        seen_hashes.add(img_hash)
+                        
+                        image_path = Path(output_dir) / f"page{page_num + 1}_img{img_index + 1}.png"
+                        with open(image_path, "wb") as img_file:
+                            img_file.write(image_bytes)
+                        
+                        image_paths.append(str(image_path))
+                        
+                    except Exception as e:
+                        continue
             
             pdf_document.close()
-            print(f"✓ Extracted {len(image_paths)} images from PDF")
+            print(f"Extracted {len(image_paths)} unique images from PDF (filtered small/duplicates)")
             return image_paths
             
         except Exception as e:
-            print(f"✗ Error extracting images: {e}")
+            print(f"Error extracting images: {e}")
             return []
     
     def extract_images_from_pptx(self, pptx_path: str, output_dir: str = "./temp_images") -> List[str]:
         """
-        Extract images from PowerPoint
-        
-        Args:
-            pptx_path: Path to PowerPoint file
-            output_dir: Directory to save extracted images
-            
-        Returns:
-            List of image file paths
+        Extract images from PowerPoint with filtering
         """
         if not PPTX_AVAILABLE:
-            print("⚠️ python-pptx not installed. Cannot extract images.")
+            print("python-pptx not installed. Cannot extract images.")
             return []
         
         Path(output_dir).mkdir(exist_ok=True)
         image_paths = []
+        seen_hashes = set()
         
         try:
             prs = Presentation(pptx_path)
@@ -156,28 +165,39 @@ class DocumentLoader:
                         image = shape.image
                         image_bytes = image.blob
                         
-                        image_path = Path(output_dir) / f"slide{slide_num + 1}_img{shape_num + 1}.png"
-                        with open(image_path, "wb") as img_file:
-                            img_file.write(image_bytes)
-                        
-                        image_paths.append(str(image_path))
+                        try:
+                            pil_img = Image.open(io.BytesIO(image_bytes))
+                            width, height = pil_img.size
+                            
+                            # Skip small images
+                            if width < 200 or height < 200:
+                                continue
+                                
+                            # Skip duplicates
+                            img_hash = hashlib.md5(image_bytes).hexdigest()
+                            if img_hash in seen_hashes:
+                                continue
+                            seen_hashes.add(img_hash)
+                            
+                            image_path = Path(output_dir) / f"slide{slide_num + 1}_img{shape_num + 1}.png"
+                            with open(image_path, "wb") as img_file:
+                                img_file.write(image_bytes)
+                            
+                            image_paths.append(str(image_path))
+                            
+                        except Exception:
+                            continue
             
-            print(f"✓ Extracted {len(image_paths)} images from PowerPoint")
+            print(f"Extracted {len(image_paths)} unique images from PowerPoint")
             return image_paths
             
         except Exception as e:
-            print(f"✗ Error extracting images: {e}")
+            print(f"Error extracting images: {e}")
             return []
     
     def analyze_image_with_vision(self, image_path: str) -> str:
         """
         Analyze an image using vision model
-        
-        Args:
-            image_path: Path to image file
-            
-        Returns:
-            Extracted text and analysis
         """
         try:
             # Read and encode image
@@ -193,7 +213,7 @@ class DocumentLoader:
                     "content": [
                         {
                             "type": "text",
-                            "text": "Extract all text, formulas, diagrams, charts, and tables from this image. Provide detailed descriptions."
+                            "text": "Extract ONLY educational content (text, data, formulas). DO NOT describe colors, visual style, or layout."
                         },
                         {
                             "type": "image_url",
@@ -209,35 +229,37 @@ class DocumentLoader:
             return response.content
             
         except Exception as e:
-            print(f"✗ Error analyzing image {image_path}: {e}")
+            print(f"Error analyzing image {image_path}: {e}")
             return ""
     
     def process_images_to_docs(self, image_paths: List[str]) -> List[Document]:
         """
-        Process images and create Document objects
-        
-        Args:
-            image_paths: List of image file paths
-            
-        Returns:
-            List of Document objects with image analysis
+        Process images and create Document objects using parallel execution
         """
         image_docs = []
         
-        for i, img_path in enumerate(image_paths, 1):
-            print(f"  Analyzing image {i}/{len(image_paths)}...")
-            
-            analysis = self.analyze_image_with_vision(img_path)
-            
-            if analysis:
-                doc = Document(
-                    page_content=analysis,
-                    metadata={
-                        'source': img_path,
-                        'type': 'image_analysis'
-                    }
-                )
-                image_docs.append(doc)
+        print(f"Analyzing {len(image_paths)} images in parallel...")
         
-        print(f"✓ Created {len(image_docs)} documents from images")
+        with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
+            # Create a map of future -> image_path
+            future_to_path = {executor.submit(self.analyze_image_with_vision, path): path for path in image_paths}
+            
+            for i, future in enumerate(concurrent.futures.as_completed(future_to_path), 1):
+                path = future_to_path[future]
+                try:
+                    analysis = future.result()
+                    if analysis:
+                        doc = Document(
+                            page_content=analysis,
+                            metadata={
+                                'source': path,
+                                'type': 'image_analysis'
+                            }
+                        )
+                        image_docs.append(doc)
+                    print(f"Processed image {i}/{len(image_paths)}")
+                except Exception as e:
+                    print(f"Failed to process image {path}: {e}")
+        
+        print(f"Created {len(image_docs)} documents from images")
         return image_docs

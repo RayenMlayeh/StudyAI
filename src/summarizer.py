@@ -1,8 +1,3 @@
-"""
-Summarizer Module
-Generates comprehensive exam study guides using map-reduce strategy
-"""
-
 from typing import List
 from langchain_openai import ChatOpenAI
 from langchain_core.documents import Document
@@ -10,9 +5,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 
 
-class CourseSummarizer:
-    """Generate comprehensive study guides from course material using map-reduce"""
-    
+class CourseSummarizer:    
     def __init__(self, api_key: str, model: str = "x-ai/grok-4.1-fast"):
         self.llm = ChatOpenAI(
             model=model,
@@ -22,39 +15,147 @@ class CourseSummarizer:
             max_tokens=8000
         )
     
-    def generate_summary(self, documents: List[Document], batch_size: int = 10) -> str:
-        """
-        Generate a comprehensive exam study guide using map-reduce summarization.
+    def detect_global_topic(self, documents: List[Document]) -> str:
+        # Sample first chunk and a few random chunks to get the gist
+        sample_docs = [documents[0]]
+        if len(documents) > 5:
+            import random
+            sample_docs.extend(random.sample(documents[1:], min(3, len(documents)-1)))
+            
+        context = "\n\n".join([doc.page_content[:1000] for doc in sample_docs])
         
-        This is a token-efficient approach that:
-        1. Splits documents into batches (MAP phase)
-        2. Extracts key information from each batch
-        3. Combines into a final comprehensive study guide (REDUCE phase)
+        prompt = f"""Analyze the following course material samples and identify the SINGLE global main topic.
         
-        The study guide includes:
-        - All definitions, formulas, and concepts
-        - Detailed methods and algorithms
-        - Worked examples
-        - Exam preparation tips
+        Material Samples:
+        {context}
         
-        Automatically detects language and responds in the same language (French/English).
+        Return ONLY the topic name (e.g., "Cybersecurity", "Linear Algebra", "Marketing Principles").
+        Do not add any other text.
         
-        Args:
-            documents: List of Document objects containing course content
-            batch_size: Number of documents per batch
+        Global Topic:"""
         
-        Returns:
-            Comprehensive study guide in markdown format
-        """
+        try:
+            response = self.llm.invoke(prompt)
+            return response.content.strip()
+        except Exception:
+            return "Course Material"
+
+    def generate_summary(self, documents: List[Document], batch_size: int = 20) -> str:
         if not documents:
-            return "⚠️ No documents provided for summarization"
+            return "No documents provided for summarization"
         
+        # Detect global topic first
+        print("Detecting global topic...")
+        global_topic = self.detect_global_topic(documents)
+        print(f"Global Topic Detected: {global_topic}")
+        
+        # Calculate total content length
+        full_text = "\n\n".join([doc.page_content for doc in documents])
+        total_chars = len(full_text)
+        
+        # STRATEGY SELECTION
+        # If document is small/medium (< 80,000 chars approx 20k tokens), use SINGLE PASS
+        # This is better for coherence and global context
+        if total_chars < 80000:
+            print(f"\n{'='*80}")
+            print(f"SINGLE PASS MODE: Processing {total_chars} chars (fits in context)")
+            print(f"{'='*80}")
+            
+            single_pass_prompt = ChatPromptTemplate.from_template(
+                f"""Create a CONCISE EXECUTIVE SUMMARY / CHEAT SHEET for the course topic: {{global_topic}}.
+
+STRICT RULES:
+1. Analyze the FULL TEXT provided below
+2. Synthesize a study guide FOCUSED on: {{global_topic}}
+3. IGNORE information unrelated to {{global_topic}}
+4. Write EVERYTHING in the SAME LANGUAGE as the text
+5. DO NOT add external knowledge
+
+Target: ~1500 words (concise, high-impact cheat sheet)
+
+STRUCTURE YOUR CHEAT SHEET EXACTLY LIKE THIS:
+
+# COURSE TITLE: {{global_topic}}
+[One clear title line]
+
+---
+
+# KEY DEFINITIONS
+
+List ONLY the most critical terms:
+- Term: Concise definition
+[Include only essential vocabulary]
+
+---
+
+# ESSENTIAL FORMULAS
+
+For EACH critical formula:
+Formula Name:
+- Formula: [Write the actual mathematical expression]
+- Variables: [Briefly explain symbols]
+- Usage: [When to use (1 line)]
+
+[List only the most important formulas]
+
+---
+
+# MAJOR CONCEPTS
+
+For each core concept:
+Concept Name:
+- Concise explanation
+- Key points
+
+---
+
+# MAIN METHODS
+
+For each key method:
+Method Name:
+1. Step 1
+2. Step 2
+[Brief step-by-step]
+
+---
+
+# TYPICAL EXAMPLE
+
+Example:
+- Problem: [Problem statement]
+- Solution: [Solution steps]
+- Answer: [Result]
+
+[Include only 1-2 representative examples]
+
+---
+
+# KEY TAKEAWAYS
+
+- Key point 1
+- Key point 2
+- Mistake to avoid
+
+COURSE MATERIAL:
+{{context}}
+
+Concise Exam Cheat Sheet:""")
+            
+            chain = single_pass_prompt | self.llm
+            response = chain.invoke({"context": full_text, "global_topic": global_topic})
+            
+            word_count = len(response.content.split())
+            print(f"\nStudy guide generated successfully (~{word_count} words)")
+            return response.content
+
+        # FALLBACK: MAP-REDUCE FOR LARGE DOCUMENTS (> 80k chars)
+        print(f"\n{'='*80}")
+        print(f"MAP-REDUCE MODE: Processing {total_chars} chars (too large for single pass)")
+        print(f"{'='*80}")
+
         # Calculate target word counts based on document volume
         num_docs = len(documents)
-        if num_docs <= 10:
-            batch_words = 200
-            final_words = 500
-        elif num_docs <= 30:
+        if num_docs <= 30:
             batch_words = 300
             final_words = 1000
         elif num_docs <= 50:
@@ -66,30 +167,26 @@ class CourseSummarizer:
         
         # MAP PHASE: Extract information from each batch
         map_prompt = ChatPromptTemplate.from_template(
-            f"""You are analyzing course material chunks. Extract ONLY the MOST CRITICAL study information from the provided text below.
+            f"""You are analyzing course material chunks. Extract ONLY the MOST CRITICAL study information related to the GLOBAL TOPIC: {{global_topic}}.
 
-**⛔ ABSOLUTE RULES - VIOLATION WILL INVALIDATE YOUR RESPONSE:**
-1. ONLY extract information EXPLICITLY written in the text below
-2. DO NOT use any external knowledge, memory, or previous training
-3. DO NOT invent examples, formulas, or concepts not in this text
-4. DO NOT mention topics that don't appear in this specific text
-5. If something is not in the text, DO NOT include it
-6. Quote the actual subject/topic names from the text (e.g., if text is about "Security", don't mention "Algebra")
+STRICT RULES:
+1. FOCUS STRICTLY on the Global Topic: {{global_topic}}
+2. IGNORE information unrelated to {{global_topic}} (e.g., unrelated examples, tangents)
+3. ONLY extract information EXPLICITLY written in the text below
+4. DO NOT use any external knowledge
+5. Quote the actual subject/topic names from the text
 
-**IMPORTANT: Detect the language of the text and respond in the EXACT SAME LANGUAGE (French → French, English → English)**
+IMPORTANT: Detect the language of the text and respond in the EXACT SAME LANGUAGE.
 
-**FIRST: Identify the main topic/subject from the text (e.g., "Security", "Algebra", "Biology", etc.)**
-**Main Topic of this text:** [Write the topic you see in the text]
+Extract and list in detail (ONLY if present in text and relevant to {{global_topic}}):
 
-Extract and list in detail (ONLY if present in text):
+1. KEY DEFINITIONS: Only the most important technical terms
+2. ESSENTIAL FORMULAS: Critical mathematical formulas only
+3. MAIN METHODS: Key procedures/algorithms
+4. MAJOR CONCEPTS: Core theories with brief explanations
+5. KEY EXAMPLE: One best example if available
 
-1. **DÉFINITIONS CLÉS / KEY DEFINITIONS**: Only the most important technical terms (copy from text)
-2. **FORMULES ESSENTIELLES / ESSENTIAL FORMULAS**: Critical mathematical formulas only (copy exactly as shown)
-3. **MÉTHODES PRINCIPALES / MAIN METHODS**: Key procedures/algorithms (copy steps from text)
-4. **CONCEPTS MAJEURS / MAJOR CONCEPTS**: Core theories with brief explanations (copy from text)
-5. **EXEMPLE CLÉ / KEY EXAMPLE**: One best example if available (copy from text)
-
-**VALIDATION CHECK**: Re-read the text below and verify every sentence you write comes DIRECTLY from it.
+VALIDATION CHECK: Re-read the text below and verify every sentence you write comes DIRECTLY from it and relates to {{global_topic}}.
 
 Target: ~{batch_words} words (concise extraction)
 
@@ -103,105 +200,109 @@ My extraction (strictly from above text only):""")
         total_batches = (len(documents) + batch_size - 1) // batch_size
         
         print(f"\n{'='*80}")
-        print(f"📊 MAP PHASE: Processing {len(documents)} documents in {total_batches} batches")
+        print(f"MAP PHASE: Processing {len(documents)} documents in {total_batches} batches")
         print(f"{'='*80}")
         
+        # Prepare batches
+        batch_contexts = []
         for i in range(0, len(documents), batch_size):
             batch = documents[i:i + batch_size]
-            batch_num = i // batch_size + 1
-            
-            # Create context for this batch - combine chunks without truncation
+            # Create context for this batch
             context_parts = []
             for doc in batch:
                 source = doc.metadata.get('source_file', 'Unknown')
                 page = doc.metadata.get('page', '?')
-                # Don't truncate - chunks are already sized appropriately
                 context_parts.append(f"[Source: {source}, Page: {page}]\n{doc.page_content}")
             context = "\n\n---\n\n".join(context_parts)
-            
-            # Extract information from batch
-            chain = {"context": RunnablePassthrough()} | map_prompt | self.llm
-            response = chain.invoke(context)
+            batch_contexts.append({"context": context, "global_topic": global_topic})
+
+        # Process batches in parallel
+        print(f"Processing {len(batch_contexts)} batches in parallel...")
+        chain = map_prompt | self.llm
+        
+        # Use batch processing with concurrency
+        responses = chain.batch(batch_contexts, config={"max_concurrency": 5})
+        
+        for i, response in enumerate(responses, 1):
             batch_summaries.append(response.content)
-            
-            print(f"  ✓ Batch {batch_num}/{total_batches} processed ({len(batch)} documents)")
+            print(f"Processed Batch {i}/{total_batches}")
         
         # REDUCE PHASE: Combine into final study guide
         reduce_prompt = ChatPromptTemplate.from_template(
-            f"""Create a CONCISE EXECUTIVE SUMMARY / CHEAT SHEET by synthesizing the batch extractions below.
+            f"""Create a CONCISE EXECUTIVE SUMMARY / CHEAT SHEET for the course topic: {{global_topic}}.
 
-**⛔ CRITICAL ANTI-HALLUCINATION RULES:**
+ANTI-HALLUCINATION RULES:
 1. ONLY use information from the batch extractions below
-2. DO NOT add external knowledge or topics not in the extractions
-3. Combine ALL topics found in the extractions (e.g., if batches cover "Algebra" AND "Security", include BOTH)
-4. Write EVERYTHING in the SAME LANGUAGE as the batch extractions (if mixed, use the dominant language or separate sections)
+2. DO NOT add external knowledge
+3. Synthesize a study guide FOCUSED on: {{global_topic}}
+4. Write EVERYTHING in the SAME LANGUAGE as the batch extractions
 
 Target: ~{final_words} words (concise, high-impact cheat sheet)
 
-**STRUCTURE YOUR CHEAT SHEET EXACTLY LIKE THIS:**
+STRUCTURE YOUR CHEAT SHEET EXACTLY LIKE THIS:
 
-#  TITRE DU COURS / COURSE TITLE
+# COURSE TITLE: {{global_topic}}
 [One clear title line]
 
 ---
 
-# 📖 DÉFINITIONS CLÉS / KEY DEFINITIONS
+# KEY DEFINITIONS
 
 List ONLY the most critical terms:
-- **Terme/Term**: Définition concise / Concise definition
+- Term: Concise definition
 [Include only essential vocabulary]
 
 ---
 
-# 🔢 FORMULES ESSENTIELLES / ESSENTIAL FORMULAS
+# ESSENTIAL FORMULAS
 
 For EACH critical formula:
-**Nom de la formule / Formula name:**
-- Formule: [Write the actual mathematical expression]
+Formula Name:
+- Formula: [Write the actual mathematical expression]
 - Variables: [Briefly explain symbols]
-- Utilisation: [When to use (1 line)]
+- Usage: [When to use (1 line)]
 
 [List only the most important formulas]
 
 ---
 
-# 💡 CONCEPTS MAJEURS / MAJOR CONCEPTS
+# MAJOR CONCEPTS
 
 For each core concept:
-**Nom du concept / Concept name:**
-- Explication concise / Concise explanation
-- Points clés / Key points
+Concept Name:
+- Concise explanation
+- Key points
 
 ---
 
-# ⚙️ MÉTHODES PRINCIPALES / MAIN METHODS
+# MAIN METHODS
 
 For each key method:
-**Nom de la méthode / Method name:**
-1. Étape 1 / Step 1
-2. Étape 2 / Step 2
+Method Name:
+1. Step 1
+2. Step 2
 [Brief step-by-step]
 
 ---
 
-# 📝 EXEMPLE TYPE / TYPICAL EXAMPLE
+# TYPICAL EXAMPLE
 
-**Exemple / Example:**
-- Énoncé / Problem: [Problem statement]
+Example:
+- Problem: [Problem statement]
 - Solution: [Solution steps]
-- Réponse / Answer: [Result]
+- Answer: [Result]
 
 [Include only 1-2 representative examples]
 
 ---
 
-# ⚠️ À RETENIR / KEY TAKEAWAYS
+# KEY TAKEAWAYS
 
-- ✓ Point clé 1 / Key point 1
-- ✓ Point clé 2 / Key point 2
-- ⚠️ Erreur à éviter / Mistake to avoid
+- Key point 1
+- Key point 2
+- Mistake to avoid
 
-**CRITICAL INSTRUCTIONS:**
+CRITICAL INSTRUCTIONS:
 - Focus on QUALITY over QUANTITY.
 - Synthesize and condense information.
 - Do NOT list every single detail, only what is needed for an exam cheat sheet.
@@ -214,14 +315,14 @@ Concise Exam Cheat Sheet:""")
         combined_summaries = "\n\n=== BATCH EXTRACTION ===\n\n".join(batch_summaries)
         
         print(f"\n{'='*80}")
-        print(f"🔄 REDUCE PHASE: Combining {len(batch_summaries)} batch extractions")
+        print(f"REDUCE PHASE: Combining {len(batch_summaries)} batch extractions")
         print(f"{'='*80}")
         
-        chain = {"summaries": RunnablePassthrough()} | reduce_prompt | self.llm
-        final_summary = chain.invoke(combined_summaries)
+        chain = {"summaries": RunnablePassthrough(), "global_topic": RunnablePassthrough()} | reduce_prompt | self.llm
+        final_summary = chain.invoke({"summaries": combined_summaries, "global_topic": global_topic})
         
         word_count = len(final_summary.content.split())
-        print(f"\n✓ Study guide generated successfully (~{word_count} words)")
+        print(f"\nStudy guide generated successfully (~{word_count} words)")
         
         return final_summary.content
     

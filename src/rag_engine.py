@@ -28,7 +28,7 @@ class RAGEngine:
             True if successful, False otherwise
         """
         if not documents:
-            print("⚠️ No documents to process")
+            print("No documents to process")
             return False
         
         try:
@@ -37,11 +37,11 @@ class RAGEngine:
                 embedding=self.embeddings,
                 collection_name="course_collection"
             )
-            print(f"✓ Vector store created with {len(documents)} chunks")
+            print(f"Vector store created with {len(documents)} chunks")
             return True
             
         except Exception as e:
-            print(f"✗ Error creating vector store: {e}")
+            print(f"Error creating vector store: {e}")
             return False
     
     def retrieve_relevant_docs(self, query: str, k: int = 5, score_threshold: float = 0.5) -> List[Document]:
@@ -57,7 +57,7 @@ class RAGEngine:
             List of relevant Document objects
         """
         if not self.vector_store:
-            print("⚠️ Vector store not initialized. Upload a PDF first.")
+            print("Vector store not initialized. Upload a PDF first.")
             return []
         
         try:
@@ -75,7 +75,7 @@ class RAGEngine:
             # For safety, let's just return the docs but print scores.
             
             relevant_docs = []
-            print(f"🔍 Retrieval scores for '{query}':")
+            print(f"Retrieval scores for '{query}':")
             for doc, score in docs_and_scores:
                 print(f"  - Score: {score:.4f} | Content: {doc.page_content[:50]}...")
                 relevant_docs.append(doc)
@@ -83,7 +83,7 @@ class RAGEngine:
             return relevant_docs
             
         except Exception as e:
-            print(f"✗ Error retrieving documents: {e}")
+            print(f"Error retrieving documents: {e}")
             return []
             
 
